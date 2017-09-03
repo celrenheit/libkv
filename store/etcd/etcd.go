@@ -224,6 +224,12 @@ func (s *Etcd) Watch(key string, stopCh <-chan struct{}) (<-chan *store.KVPair, 
 	// watchCh is sending back events to the caller
 	watchCh := make(chan *store.KVPair)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-stopCh
+		cancel()
+	}()
+
 	go func() {
 		defer close(watchCh)
 
@@ -244,7 +250,7 @@ func (s *Etcd) Watch(key string, stopCh <-chan struct{}) (<-chan *store.KVPair, 
 			default:
 			}
 
-			result, err := watcher.Next(context.Background())
+			result, err := watcher.Next(ctx)
 
 			if err != nil {
 				return
@@ -273,12 +279,18 @@ func (s *Etcd) WatchTree(directory string, stopCh <-chan struct{}) (<-chan []*st
 	// watchCh is sending back events to the caller
 	watchCh := make(chan []*store.KVPair)
 
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		<-stopCh
+		cancel()
+	}()
+
 	go func() {
 		defer close(watchCh)
 
 		// Get child values
 		list, err := s.List(directory)
-		if err != nil {
+		if err != nil && err != store.ErrKeyNotFound {
 			return
 		}
 
@@ -293,14 +305,14 @@ func (s *Etcd) WatchTree(directory string, stopCh <-chan struct{}) (<-chan []*st
 			default:
 			}
 
-			_, err := watcher.Next(context.Background())
+			_, err := watcher.Next(ctx)
 
 			if err != nil {
 				return
 			}
 
 			list, err = s.List(directory)
-			if err != nil {
+			if err != nil && err != store.ErrKeyNotFound {
 				return
 			}
 
